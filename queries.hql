@@ -1,34 +1,6 @@
-# HadoopHiveHue
-Hadoop , Hive, Hue setup pseudo distributed  environment  using docker compose
+set hive.resultset.use.unique.column.names=false;
 
-# Hive Assignment: Employee and Department Data Analysis
-
-## **Objective**
-Analyze employee and department data using Hive by executing queries on a partitioned table, ensuring correct data loading using the `ALTER TABLE` statement rather than specifying partitions at creation.
-
-## **Setup Instructions**
-### **1. Start Hive**
-Run the following command in your VS Code terminal:
-```bash
-docker compose up -d
-
-docker cp input_dataset/employees.csv hive-server:/opt/
-
-docker cp input_dataset/departments.csv  hive-server:/opt/
-
-docker exec -it hive-server /bin/bash
-
-hdfs dfs -mkdir/ input
-
-hdfs -put department.csv / input_dataset/
-
-hdfs -put employees.csv / input_dataset/
-
-```
-
-### **2. Create and Load Tables**
-#### **Create Temporary Employees Table**
-```sql
+-- Create Temporary Table for Employees
 CREATE TABLE temp_employees (
     emp_id INT,
     name STRING,
@@ -41,15 +13,14 @@ CREATE TABLE temp_employees (
 )
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ','
-STORED AS TEXTFILE;
-```
-#### **Load Employees Data**
-```sql
-LOAD DATA INPATH '/input_dataset/employees.csv' INTO TABLE temp_employees;
-```
+STORED AS TEXTFILE
+TBLPROPERTIES ("skip.header.line.count"="1");
 
-#### **Create Departments Table**
-```sql
+
+-- Load Data into Temporary Table
+LOAD DATA INPATH '/input_dataset/employees.csv' INTO TABLE temp_employees;
+
+-- Create Departments Table
 CREATE TABLE departments (
     dept_id INT,
     department_name STRING,
@@ -57,15 +28,13 @@ CREATE TABLE departments (
 )
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ','
-STORED AS TEXTFILE;
-```
-#### **Load Departments Data**
-```sql
-LOAD DATA INPATH '/input_dataset/departments.csv' INTO TABLE departments;
-```
+STORED AS TEXTFILE
+TBLPROPERTIES ("skip.header.line.count"="1");
 
-### **3. Create Employees Table with Partitioning**
-```sql
+-- Load Data into Departments Table
+LOAD DATA INPATH '/input_dataset/departments.csv' INTO TABLE departments;
+
+-- Create Partitioned Employees Table
 CREATE TABLE employees (
     emp_id INT,
     name STRING,
@@ -79,19 +48,14 @@ PARTITIONED BY (department STRING)
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ','
 STORED AS TEXTFILE;
-```
 
-#### **Inserting Data into Partitioned Table**
-```sql
-
+-- Insert Data into Partitioned Table
 ALTER TABLE employees ADD PARTITION (department='HR');
 ALTER TABLE employees ADD PARTITION (department='IT');
 ALTER TABLE employees ADD PARTITION (department='Finance');
 ALTER TABLE employees ADD PARTITION (department='Marketing');
 ALTER TABLE employees ADD PARTITION (department='Operations');
-```
 
-```sql
 
 INSERT overwrite TABLE employees PARTITION(department='HR')
 SELECT emp_id, name, age, job_role, salary, project, join_date FROM temp_employees where department='HR';
@@ -107,87 +71,51 @@ SELECT emp_id, name, age, job_role, salary, project, join_date FROM temp_employe
 
 INSERT overwrite TABLE employees PARTITION(department='Operations')
 SELECT emp_id, name, age, job_role, salary, project, join_date FROM temp_employees where department='Operations';
-```
 
-
-#### **Check Partitions**
-```sql
+-- Check Partitions
 SHOW PARTITIONS employees;
-```
 
-## **Query Execution in Hue**
-Once the data is loaded, running these queries in Hue:
+-- Queries for Analysis
 
-### **1. Retrieve all employees who joined after 2015**
-```sql
+-- 1. Retrieve all employees who joined after 2015
 SELECT * FROM employees WHERE year(join_date) > 2015;
-```
 
-### **2. Find the average salary of employees in each department**
-```sql
+-- 2. Find the average salary of employees in each department
 SELECT department, AVG(salary) AS average_salary FROM employees GROUP BY department;
-```
 
-### **3. Identify employees working on the 'Alpha' project**
-```sql
+-- 3. Identify employees working on the 'Alpha' project
 SELECT * FROM employees WHERE project = 'Alpha';
-```
 
-### **4. Count the number of employees in each job role**
-```sql
+-- 4. Count the number of employees in each job role
 SELECT job_role, COUNT(*) AS count FROM employees GROUP BY job_role;
-```
 
-### **5. Retrieve employees whose salary is above the average salary of their department**
-```sql
+-- 5. Retrieve employees whose salary is above the average salary of their department
 SELECT emp1.* FROM employees emp1 
 JOIN (SELECT department, AVG(salary) AS avg_salary FROM employees GROUP BY department) emp2 
 ON emp1.department = emp2.department 
 WHERE emp1.salary > emp2.avg_salary;
-```
 
-### **6. Find the department with the highest number of employees**
-```sql
+-- 6. Find the department with the highest number of employees
 SELECT department, COUNT(*) AS employee_count FROM employees 
 GROUP BY department ORDER BY employee_count DESC LIMIT 1;
-```
 
-### **7. Check for employees with null values in any column**
-```sql
+-- 7. Check for employees with null values in any column
 SELECT * FROM employees WHERE emp_id IS NULL OR name IS NULL OR age IS NULL OR 
 job_role IS NULL OR salary IS NULL OR project IS NULL OR join_date IS NULL OR department IS NULL;
-```
 
-### **8. Join employees and departments to display employee details along with department locations**
-```sql
-SELECT e.emp_id, e.name, e.age, e.job_role, e.salary, e.project, e.join_date, 
-       d.department_name, d.location
-FROM employees e 
-JOIN departments d ON e.department = d.department_name;
-```
-
-### **9. Rank employees within each department based on salary**
-```sql
+-- 8. Join employees and departments to display employee details along with department locations
 SELECT emp.emp_id, emp.name, emp.age, emp.job_role, emp.salary, emp.project, emp.join_date, 
        dept.department_name, dept.location
 FROM employees emp
 JOIN departments dept ON emp.department = dept.department_name;
-```
 
-### **10. Find the top 3 highest-paid employees in each department**
-```sql
+-- 9. Rank employees within each department based on salary
+SELECT emp_id, name, salary, department, RANK() OVER (PARTITION BY department ORDER BY salary DESC) AS salary_rank
+FROM employees;
+
+-- 10. Find the top 3 highest-paid employees in each department
 SELECT * FROM (
     SELECT emp_id, name, salary, department,
-           DENSE_RANK() OVER (PARTITION BY department ORDER BY salary DESC) AS rank
+        DENSE_RANK() OVER (PARTITION BY department ORDER BY salary DESC) AS rank
     FROM employees
 ) ranked WHERE rank <= 3;
-```
-### **4. Printing Output to File**
-
-docker cp queries.hql  hive-server:/opt/
-
-beeline -u jdbc:hive2://localhost:10000 -f queries.hql --outputformat=table > output.txt
-
-docker cp  hive-server:/opt/output.txt Output/
-
-### **5. Push to GitHub**
