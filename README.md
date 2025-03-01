@@ -16,13 +16,15 @@ docker cp input_dataset/employees.csv hive-server:/opt/
 
 docker cp input_dataset/departments.csv  hive-server:/opt/
 
+docker cp queries.hql  hive-server:/opt/
+
 docker exec -it hive-server /bin/bash
 
 hdfs dfs -mkdir/ input
 
-hdfs -put department.csv / input_dataset/
+hdfs dfs -put departments.csv /input_dataset/
 
-hdfs -put employees.csv / input_dataset/
+hdfs dfs -put employees.csv /input_dataset/
 
 ```
 
@@ -183,8 +185,6 @@ SELECT * FROM (
 ) ranked WHERE rank <= 3;
 ```
 ### **4. Printing Output to File**
-
-docker cp queries.hql  hive-server:/opt/
 
 beeline -u jdbc:hive2://localhost:10000 -f queries.hql --outputformat=table > output.txt
 
